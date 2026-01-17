@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+    
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('tab-rewards')">📅 Suivi Clan</button>
+        <button class="tab-btn" onclick="switchTab('tab-members')">👥 Admin</button>
+    </div>
+
+    <div id="tab-rewards" class="tab-content active">
+        <div class="sticky-panel">
+            <div class="filter-bar">
+                <div class="rank-toggles" id="rankFilters">
+                    <button class="rank-btn active" onclick="toggleRankFilter('R5')" data-rank="R5">R5</button>
+                    <button class="rank-btn active" onclick="toggleRankFilter('R4')" data-rank="R4">R4</button>
+                    <button class="rank-btn active" onclick="toggleRankFilter('R3')" data-rank="R3">R3</button>
+                    <button class="rank-btn active" onclick="toggleRankFilter('R2')" data-rank="R2">R2</button>
+                    <button class="rank-btn active" onclick="toggleRankFilter('R1')" data-rank="R1">R1</button>
+                    <button class="reset-btn" onclick="resetRankFilters()" title="Tout reselectionner">Tout</button>
+                </div>
+                <div class="vertical-sep"></div>
+                <select id="statusFilter" style="width:auto;" onchange="renderMainList()">
+                    <option value="ALL">Statut: Tous</option>
+                    <option value="RECEIVED">Déjà Reçu</option>
+                    <option value="NEVER">Jamais Reçu</option>
+                </select>
+                <div class="sort-controls">
+                    <select id="sortFilter" style="width:auto;" onchange="renderMainList()">
+                        <option value="RANK">Tri: Par Rang</option>
+                        <option value="CHRONO">Tri: Chronologique</option>
+                    </select>
+                    <button class="reverse-btn" onclick="toggleSortOrder()" id="orderBtn" title="Inverser l'ordre">⬇️</button>
+                </div>
+            </div>
+
+            <div class="control-box">
+                <div class="input-wrapper" style="flex: 2;">
+                    <label>Membre</label>
+                    <input type="text" id="memberInput" placeholder="Rechercher..." autocomplete="off">
+                    <div id="suggestions" class="suggestions-box"></div>
+                </div>
+                <div class="input-wrapper">
+                    <label>Date</label>
+                    <input type="date" id="dateInput">
+                </div>
+                <div class="input-wrapper">
+                    <label>Type</label>
+                    <select id="typeInput">
+                        <option value="VIP">VIP</option>
+                        <option value="TRAIN">Train</option>
+                    </select>
+                </div>
+                <button class="action-btn" onclick="addReward()">Valider</button>
+            </div>
+        </div>
+        <div id="membersListContainer"></div>
+    </div>
+
+    <div id="tab-members" class="tab-content">
+        <h3>Gestion des Membres</h3>
+        
+        <div class="admin-add-box">
+            <div class="input-wrapper">
+                <label>Nouveau Pseudo</label>
+                <input type="text" id="newMemberName" placeholder="Ex: ShadowHunter">
+            </div>
+            <div class="input-wrapper" style="max-width:80px;">
+                <label>Rang</label>
+                <select id="newMemberRank">
+                    <option value="R1">R1</option>
+                    <option value="R2">R2</option>
+                    <option value="R3">R3</option>
+                    <option value="R4">R4</option>
+                    <option value="R5">R5</option>
+                </select>
+            </div>
+            <button class="action-btn" style="margin:0; height:36px;" onclick="addMember()">Ajouter</button>
+        </div>
+
+        <div style="text-align: right; margin-bottom: 15px;">
+            <button class="btn-import" onclick="openImportModal()">📥 Importer une liste (Copier/Coller)</button>
+        </div>
+
+        <div id="manageMembersGrid" class="member-manage-grid"></div>
+
+        <div class="log-area">
+            <button class="btn-log" onclick="downloadLogs()">📥 Télécharger Logs</button>
+        </div>
+    </div>
+
+</div>
+
+<div id="editModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 style="margin-top:0">Modifier Récompense</h3>
+        <input type="hidden" id="editId">
+        <div style="margin-bottom:10px"><label>Joueur :</label> <strong id="editPlayerName" style="color:var(--accent)">-</strong></div>
+        <div style="margin-bottom:10px"><label>Date</label><input type="date" id="editDate"></div>
+        <div style="margin-bottom:10px"><label>Type</label><select id="editType"><option value="VIP">VIP</option><option value="TRAIN">Train</option></select></div>
+        <div class="modal-buttons" style="justify-content:space-between">
+            <button class="btn-delete" onclick="confirmDelete()">Supprimer</button>
+            <div>
+                <button class="btn-cancel" onclick="closeModal('editModal')">Annuler</button>
+                <button class="btn-save" onclick="confirmEdit()">Sauver</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="memberEditModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 style="margin-top:0">Modifier Rang</h3>
+        <input type="hidden" id="editMemberNameOriginal">
+        <div style="margin-bottom:15px">
+            <label>Joueur</label>
+            <input type="text" id="editMemberName" disabled style="opacity:0.7; cursor:not-allowed">
+        </div>
+        <div style="margin-bottom:15px">
+            <label>Nouveau Rang</label>
+            <select id="editMemberRank">
+                <option value="R1">R1</option>
+                <option value="R2">R2</option>
+                <option value="R3">R3</option>
+                <option value="R4">R4</option>
+                <option value="R5">R5</option>
+            </select>
+        </div>
+        <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeModal('memberEditModal')">Annuler</button>
+            <button class="btn-save" onclick="confirmMemberEdit()">Valider</button>
+        </div>
+    </div>
+</div>
+
+<div id="importModal" class="modal-overlay">
+    <div class="modal-box" style="width: 400px;">
+        <h3 style="margin-top:0">Importer une liste</h3>
+        <p style="font-size:0.9em; color:#aaa; margin-bottom:10px;">
+            Collez votre liste de pseudos ici (un par ligne).<br>
+            Ils seront tous ajoutés en <strong>R1</strong>.
+        </p>
+        <textarea id="importTextarea" rows="10" placeholder="Alex&#10;Arthur&#10;Brian..."></textarea>
+        <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeModal('importModal')">Annuler</button>
+            <button class="btn-save" onclick="processImport()">Importer</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>
