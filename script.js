@@ -289,7 +289,9 @@ window.renderMainList = function() {
     let lastRank = null;
     filtered.forEach(m => {
         if (sortMode === 'RANK' && m.rank !== lastRank) {
-            container.innerHTML += `<div class="rank-separator">${m.rank}</div>`;
+            // On compte combien de membres de ce rang sont présents dans la liste filtrée
+            const count = filtered.filter(f => f.rank === m.rank).length;
+            container.innerHTML += `<div class="rank-separator">${m.rank} <span style="font-size:0.8em; margin-left:8px; opacity:0.6">(${count})</span></div>`;
             lastRank = m.rank;
         }
         const memberHistory = rewards
@@ -323,6 +325,7 @@ function renderManageMembers() {
         const rankMembers = members.filter(m => m.rank === rank);
         rankMembers.sort((a, b) => a.name.localeCompare(b.name));
         if (rankMembers.length > 0) {
+            container.innerHTML += `<div class="rank-separator">${rank} <span style="font-size:0.8em; margin-left:8px; opacity:0.6">(${rankMembers.length})</span></div>`;
             container.innerHTML += `<div class="rank-separator">${rank}</div>`;
             let gridHTML = '<div class="rank-group-grid">';
             rankMembers.forEach(m => {
