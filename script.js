@@ -326,7 +326,6 @@ function renderManageMembers() {
         rankMembers.sort((a, b) => a.name.localeCompare(b.name));
         if (rankMembers.length > 0) {
             container.innerHTML += `<div class="rank-separator">${rank} <span style="font-size:0.8em; margin-left:8px; opacity:0.6">(${rankMembers.length})</span></div>`;
-            container.innerHTML += `<div class="rank-separator">${rank}</div>`;
             let gridHTML = '<div class="rank-group-grid">';
             rankMembers.forEach(m => {
                 gridHTML += `
