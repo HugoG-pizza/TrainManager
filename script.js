@@ -39,6 +39,7 @@ let logs = [];
 // --- STATE UI ---
 let activeRanks = new Set(['R1', 'R2', 'R3', 'R4', 'R5']);
 let isReverseOrder = false;
+let activeTypes = new Set(['VIP', 'TRAIN']);
 
 // --- INIT & LISTENER FIREBASE ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -124,6 +125,26 @@ window.resetRankFilters = function() {
     renderMainList();
 }
 
+window.toggleTypeFilter = function(type) {
+    const btn = document.querySelector(`.type-btn[data-type="${type}"]`);
+    if (activeTypes.has(type)) {
+        if (activeTypes.size > 1) { // On empêche de tout décocher
+            activeTypes.delete(type);
+            btn.classList.remove('active');
+        }
+    } else {
+        activeTypes.add(type);
+        btn.classList.add('active');
+    }
+    renderMainList();
+}
+
+window.resetTypeFilters = function() {
+    ['VIP', 'TRAIN'].forEach(t => activeTypes.add(t));
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.add('active'));
+    renderMainList();
+}
+
 window.toggleSortOrder = function() {
     isReverseOrder = !isReverseOrder;
     const btn = document.getElementById('orderBtn');
@@ -163,7 +184,9 @@ window.processImport = function() {
 
 // --- METIER ---
 function getLatestRewardDate(memberName) {
-    const memberRewards = rewards.filter(r => r.member === memberName);
+    // On ne regarde QUE les récompenses des types actifs
+    const memberRewards = rewards.filter(r => r.member === memberName && activeTypes.has(r.type));
+    
     if (memberRewards.length === 0) return 0;
     memberRewards.sort((a, b) => new Date(b.date) - new Date(a.date));
     return new Date(memberRewards[0].date).getTime();
@@ -260,14 +283,24 @@ window.renderMainList = function() {
     const statusFilter = document.getElementById('statusFilter').value;
     const sortMode = document.getElementById('sortFilter').value;
 
+    // 1. FILTRAGE DES MEMBRES
     let filtered = members.filter(m => {
+        // A. Filtre Rank
         if (!activeRanks.has(m.rank)) return false;
-        const memberHistory = rewards.filter(r => r.member === m.name);
-        if (statusFilter === 'NEVER' && memberHistory.length > 0) return false;
-        if (statusFilter === 'RECEIVED' && memberHistory.length === 0) return false;
+
+        // B. On récupère l'historique FILTRÉ PAR TYPE pour ce membre
+        // On ne considère que les récompenses (VIP ou Train) qui sont cochées en haut
+        const visibleRewards = rewards.filter(r => r.member === m.name && activeTypes.has(r.type));
+
+        // C. Filtre Statut (Déjà reçu / Jamais) basé sur les récompenses VISIBLES
+        // Ex: Si je filtre "VIP" seulement, "Jamais Reçu" montrera ceux qui n'ont jamais eu de VIP (même s'ils ont eu du Train)
+        if (statusFilter === 'NEVER' && visibleRewards.length > 0) return false;
+        if (statusFilter === 'RECEIVED' && visibleRewards.length === 0) return false;
+
         return true;
     });
 
+    // 2. TRI
     filtered.sort((a, b) => {
         let res = 0;
         if (sortMode === 'RANK') {
@@ -286,24 +319,33 @@ window.renderMainList = function() {
         return;
     }
 
+    // 3. AFFICHAGE
     let lastRank = null;
     filtered.forEach(m => {
         if (sortMode === 'RANK' && m.rank !== lastRank) {
-            // On compte combien de membres de ce rang sont présents dans la liste filtrée
+            // Compteur mis à jour selon le filtre
             const count = filtered.filter(f => f.rank === m.rank).length;
             container.innerHTML += `<div class="rank-separator">${m.rank} <span style="font-size:0.8em; margin-left:8px; opacity:0.6">(${count})</span></div>`;
             lastRank = m.rank;
         }
+
+        // On ré-applique le filtre Type pour l'affichage des badges
         const memberHistory = rewards
-            .filter(r => r.member === m.name)
+            .filter(r => r.member === m.name && activeTypes.has(r.type)) // <--- ICI
             .sort((a, b) => new Date(b.date) - new Date(a.date))
             .slice(0, MAX_HISTORY_DISPLAY);
+        
         let historyHTML = '';
         memberHistory.forEach(h => {
             const bgClass = h.type === 'VIP' ? 'bg-vip' : 'bg-train';
             historyHTML += `<div class="history-badge ${bgClass}" onclick="openEditModal(${h.id}); event.stopPropagation();"><strong>${h.type}</strong><span class="date">${formatDate(h.date)}</span></div>`;
         });
-        if(memberHistory.length === 0) historyHTML = '<span style="font-size:0.8em; opacity:0.3; align-self:center;">Jamais reçu</span>';
+
+        // Texte si vide (dépend du contexte)
+        if(memberHistory.length === 0) {
+            // Petit détail UX : Si on filtre "VIP" et que le mec n'en a pas, on affiche "Aucun VIP"
+            historyHTML = '<span style="font-size:0.8em; opacity:0.3; align-self:center;">-</span>';
+        }
 
         container.innerHTML += `
             <div class="member-row">

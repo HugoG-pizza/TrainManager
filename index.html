@@ -26,6 +26,11 @@
                     <button class="rank-btn active" onclick="toggleRankFilter('R1')" data-rank="R1">R1</button>
                     <button class="reset-btn" onclick="resetRankFilters()" title="Tout reselectionner">Tout</button>
                 </div>
+                <div class="rank-toggles">
+                    <button class="rank-btn type-btn btn-vip active" onclick="toggleTypeFilter('VIP')" data-type="VIP">VIP</button>
+                    <button class="rank-btn type-btn btn-train active" onclick="toggleTypeFilter('TRAIN')" data-type="TRAIN">Train</button>
+                    <button class="reset-btn" onclick="resetTypeFilters()" title="Tout">Tout</button>
+                </div>
                 <div class="vertical-sep"></div>
                 <select id="statusFilter" style="width:auto;" onchange="renderMainList()">
                     <option value="ALL">Statut: Tous</option>
