@@ -1,6 +1,7 @@
 // --- IMPORT FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // --- CONFIGURATION FIREBASE (A REMPLIR) ---
 // Colle ici ce que tu as trouvé dans la console Firebase (Etape 1.9)
@@ -26,6 +27,7 @@ const firebaseConfig = {
 // Initialisation
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth();
 
 // --- CONFIG APP ---
 const MAX_HISTORY_DISPLAY = 5;
@@ -41,52 +43,85 @@ let activeRanks = new Set(['R1', 'R2', 'R3', 'R4', 'R5']);
 let isReverseOrder = false;
 let activeTypes = new Set(['VIP', 'TRAIN']);
 
-// --- INIT & LISTENER FIREBASE ---
+// --- 3. DEMARRAGE SECURISE ---
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('dateInput').valueAsDate = new Date();
-
-    // 1. ÉCOUTE DE LA BASE DE DONNÉES (TEMPS RÉEL)
-    // Dès qu'une donnée change sur le serveur, ce code s'exécute automatiquement
-    // et met à jour l'écran de tout le monde.
     
-    const dbRef = ref(db, '/'); // On écoute toute la base
+    // Initialisation Date Input
+    const dateInput = document.getElementById('dateInput');
+    if(dateInput) dateInput.valueAsDate = new Date();
+
+    // Event Listeners UI (Recherche, etc)
+    setupEventListeners();
+
+    // --- C'EST ICI QUE LA MAGIE OPERE ---
+    // On surveille l'état de connexion. 
+    // Si l'utilisateur n'est pas connecté, on le connecte.
+    // Une fois connecté, ON LANCE l'écoute de la DB.
+    
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            console.log("Connecté (UID):", user.uid);
+            startDatabaseListener();
+        } else {
+            console.log("Utilisateur déconnecté, tentative de connexion anonyme...");
+            signInAnonymously(auth).catch((error) => {
+                console.error("Erreur critique connexion:", error);
+                alert("Impossible de se connecter à la base de données.");
+            });
+        }
+    });
+});
+
+// Fonction qui démarre l'écoute de la DB (lancée seulement après auth réussite)
+function startDatabaseListener() {
+    const dbRef = ref(db, '/'); 
     onValue(dbRef, (snapshot) => {
         const data = snapshot.val();
         
         if (data) {
-            // Si data.members existe on le prend, sinon tableau vide
             members = data.members || [];
             rewards = data.rewards || [];
             logs = data.logs || [];
         } else {
-            // Base vide (premier lancement)
             members = []; rewards = []; logs = [];
         }
         
-        // On rafraichit l'affichage avec les nouvelles données
         renderAll();
+    }, (error) => {
+        console.error("Erreur lecture DB:", error);
+        // Si erreur de permission, c'est souvent un problème de règles Firebase
+        if(error.code === 'PERMISSION_DENIED') {
+            console.warn("Vérifiez vos règles 'rules' dans la console Firebase.");
+        }
     });
+}
 
-    // Event Listeners UI
+function setupEventListeners() {
     const searchInput = document.getElementById('memberInput');
-    searchInput.addEventListener('input', showSuggestions);
-    searchInput.addEventListener('blur', () => setTimeout(() => {
-        const suggestionBox = document.getElementById('suggestions');
-        if(suggestionBox) suggestionBox.style.display = 'none';
-    }, 200));
-});
+    if(searchInput) {
+        searchInput.addEventListener('input', showSuggestions);
+        searchInput.addEventListener('blur', () => setTimeout(() => {
+            const suggestionBox = document.getElementById('suggestions');
+            if(suggestionBox) suggestionBox.style.display = 'none';
+        }, 200));
+    }
+}
 
 // --- SAUVEGARDE (CLOUD) ---
-// Remplace l'ancien saveData localStorage
 function saveData() {
-    // On envoie tout l'état actuel vers Firebase
-    // Cela écrasera la base avec les nouvelles données locales
+    // Sécurité supplémentaire : on ne sauvegarde pas si pas connecté
+    if (!auth.currentUser) {
+        alert("Attendez la connexion avant de sauvegarder !");
+        return;
+    }
+
     set(ref(db, '/'), {
         members: members,
         rewards: rewards,
         logs: logs
     }).catch((error) => {
-        alert("Erreur de sauvegarde: " + error.message);
+        console.error("Erreur save:", error);
+        alert("Erreur de sauvegarde (Permissions ?): " + error.message);
     });
 }
 
