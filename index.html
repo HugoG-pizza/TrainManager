@@ -97,6 +97,32 @@
 
         <div id="manageMembersGrid" class="member-manage-grid"></div>
 
+        <div class="backup-panel">
+            <h3 style="margin-top:0; color: #00bcd4;">🛡️ Centre de Sauvegarde</h3>
+            <p style="font-size:0.9em; color:#aaa;">
+                Gérez vos sauvegardes (Discord Auto & Snapshots Firebase).
+            </p>
+            
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <button class="action-btn" onclick="createBackup()" style="margin:0; background:#00bcd4; color:black;">📸 Créer un Snapshot</button>
+                <span id="backupStatus" style="font-size:0.9em; color:#888;">Prêt.</span>
+            </div>
+
+            <div style="margin-top:15px;">
+                <h4 style="margin-bottom:5px; font-size:1em;">Derniers Snapshots :</h4>
+                <div id="backupList" class="backup-list-container">
+                    Chargement...
+                </div>
+            </div>
+            
+            <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="handleFileRestore(this)">
+
+            <div style="margin-top:15px; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn-delete" onclick="document.getElementById('jsonFileInput').click()" style="font-size:0.8em; padding:5px 10px; background:#e91e63;">📂 Restaurer depuis un fichier JSON</button>
+                <button class="btn-delete" onclick="restoreBackupPrompt()" style="font-size:0.8em; padding:5px 10px;">⚠️ Restaurer un Snapshot (ID)</button>
+            </div>
+        </div>
+
         <div class="log-area">
             <button class="btn-log" onclick="downloadLogs()">📥 Télécharger Logs</button>
         </div>

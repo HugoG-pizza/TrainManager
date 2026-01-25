@@ -1,28 +1,21 @@
 // --- IMPORT FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, set, update, onValue, push, get, child } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// --- CONFIGURATION FIREBASE (A REMPLIR) ---
-// Colle ici ce que tu as trouvé dans la console Firebase (Etape 1.9)
+// --- CONFIGURATION FIREBASE ---
 const firebaseConfig = {
-
   apiKey: "AIzaSyCyag9xRPwQ_abIWO7Ng-paqdUg5sIjqHk",
-
   authDomain: "train-manager-83516.firebaseapp.com",
-
   databaseURL: "https://train-manager-83516-default-rtdb.europe-west1.firebasedatabase.app",
-
   projectId: "train-manager-83516",
-
   storageBucket: "train-manager-83516.firebasestorage.app",
-
   messagingSenderId: "877276977784",
-
   appId: "1:877276977784:web:839e7f2f234139a3692b8d"
-
 };
 
+// --- CONFIGURATION DISCORD ---
+const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1464903308761235693/N6jEKVsxfjV7w5Pz8oswq9lNnsd6wlT2ELD0oBoNGquoVSaBte4yMQpEXwD8K_S0fPtU";
 
 // Initialisation
 const app = initializeApp(firebaseConfig);
@@ -33,7 +26,7 @@ const auth = getAuth();
 const MAX_HISTORY_DISPLAY = 5;
 const RANK_POWER = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1 };
 
-// --- DATA (Initialement vides, remplies par Firebase) ---
+// --- DATA ---
 let members = [];
 let rewards = [];
 let logs = [];
@@ -43,25 +36,22 @@ let activeRanks = new Set(['R1', 'R2', 'R3', 'R4', 'R5']);
 let isReverseOrder = false;
 let activeTypes = new Set(['VIP', 'TRAIN']);
 
-// --- 3. DEMARRAGE SECURISE ---
+// --- DEMARRAGE SECURISE ---
 document.addEventListener('DOMContentLoaded', () => {
     
-    // Initialisation Date Input
+    // Init UI
     const dateInput = document.getElementById('dateInput');
     if(dateInput) dateInput.valueAsDate = new Date();
-
-    // Event Listeners UI (Recherche, etc)
     setupEventListeners();
 
-    // --- C'EST ICI QUE LA MAGIE OPERE ---
-    // On surveille l'état de connexion. 
-    // Si l'utilisateur n'est pas connecté, on le connecte.
-    // Une fois connecté, ON LANCE l'écoute de la DB.
-    
+    // AUTH & START
     onAuthStateChanged(auth, (user) => {
         if (user) {
             console.log("Connecté (UID):", user.uid);
             startDatabaseListener();
+            
+            // Lancer la vérification de backup auto (petit délai pour laisser le temps de charger)
+            setTimeout(checkAndRunAutoBackup, 3000);
         } else {
             console.log("Utilisateur déconnecté, tentative de connexion anonyme...");
             signInAnonymously(auth).catch((error) => {
@@ -72,12 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Fonction qui démarre l'écoute de la DB (lancée seulement après auth réussite)
+// Fonction qui démarre l'écoute de la DB
 function startDatabaseListener() {
-    const dbRef = ref(db, '/'); 
-    onValue(dbRef, (snapshot) => {
+    // 1. Ecoute principale
+    onValue(ref(db, '/'), (snapshot) => {
         const data = snapshot.val();
-        
         if (data) {
             members = data.members || [];
             rewards = data.rewards || [];
@@ -85,14 +74,12 @@ function startDatabaseListener() {
         } else {
             members = []; rewards = []; logs = [];
         }
-        
         renderAll();
-    }, (error) => {
-        console.error("Erreur lecture DB:", error);
-        // Si erreur de permission, c'est souvent un problème de règles Firebase
-        if(error.code === 'PERMISSION_DENIED') {
-            console.warn("Vérifiez vos règles 'rules' dans la console Firebase.");
-        }
+    }, (error) => console.error("Erreur lecture DB:", error));
+
+    // 2. Ecoute des Backups (pour la liste Admin)
+    onValue(ref(db, 'backups'), (snapshot) => {
+        if(window.renderBackups) window.renderBackups(snapshot);
     });
 }
 
@@ -109,29 +96,226 @@ function setupEventListeners() {
 
 // --- SAUVEGARDE (CLOUD) ---
 function saveData() {
-    // Sécurité supplémentaire : on ne sauvegarde pas si pas connecté
-    if (!auth.currentUser) {
-        alert("Attendez la connexion avant de sauvegarder !");
-        return;
-    }
+    if (!auth.currentUser) { alert("Attendez la connexion !"); return; }
+    // Utiliser update ou set ciblé pour éviter d'écraser backups/system si jamais on touche à la racine
+    const updates = {};
+    updates['/members'] = members;
+    updates['/rewards'] = rewards;
+    updates['/logs'] = logs;
+    update(ref(db), updates).catch(err => console.error("Erreur save:", err));
+}
 
-    set(ref(db, '/'), {
+// ==========================================
+// SYSTÈME DE BACKUP (DISCORD + SNAPSHOTS + FICHIER)
+// ==========================================
+
+// 1. BACKUP AUTO DISCORD (QUOTIDIEN)
+async function checkAndRunAutoBackup() {
+    const systemRef = ref(db, 'system/lastBackupDate');
+    
+    get(systemRef).then(async (snapshot) => {
+        const lastDate = snapshot.val();
+        const today = new Date().toISOString().split('T')[0];
+
+        if (lastDate !== today) {
+            console.log("📅 Premier lancement du jour : Backup Discord en cours...");
+            await sendBackupToDiscord(); // Envoi sans paramètre = Auto
+            set(systemRef, today);
+        } else {
+            console.log("✅ Backup Discord déjà fait aujourd'hui.");
+        }
+    }).catch(err => console.error("Erreur vérif backup:", err));
+}
+
+async function sendBackupToDiscord(customMessage = null, customFilename = null) {
+    const statusLabel = customMessage ? "Manuel" : "Automatique";
+    
+    const backupData = {
+        type: statusLabel,
+        date: new Date().toLocaleString(),
         members: members,
         rewards: rewards,
         logs: logs
-    }).catch((error) => {
-        console.error("Erreur save:", error);
-        alert("Erreur de sauvegarde (Permissions ?): " + error.message);
+    };
+
+    const jsonString = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const fileName = customFilename || `backup_${new Date().toISOString().split('T')[0]}.json`;
+
+    const formData = new FormData();
+    formData.append('file', blob, fileName);
+    const messageContent = customMessage || `💾 **Sauvegarde Automatique** du ${new Date().toLocaleDateString()}\nStatut: ${members.length} membres, ${rewards.length} récompenses.`;
+    formData.append('payload_json', JSON.stringify({ content: messageContent }));
+
+    try {
+        const response = await fetch(DISCORD_WEBHOOK_URL, { method: 'POST', body: formData });
+        if (response.ok) {
+            console.log("🚀 Backup envoyé sur Discord !");
+            return true;
+        } else {
+            console.error("Erreur Discord:", response.statusText);
+            return false;
+        }
+    } catch (error) {
+        console.error("Erreur réseau Backup:", error);
+        return false;
+    }
+}
+
+// 2. SNAPSHOTS MANUELS
+window.createBackup = function() {
+    const status = document.getElementById('backupStatus');
+    status.innerText = "Sauvegarde Firebase...";
+    status.style.color = "#ff9800";
+    
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/\..+/, '').replace(/:/g, '-');
+    const backupName = `snapshot_${timestamp}`;
+
+    const fullBackup = {
+        members: members,
+        rewards: rewards,
+        logs: logs,
+        savedAt: new Date().toLocaleString()
+    };
+
+    set(ref(db, 'backups/' + backupName), fullBackup)
+    .then(async () => {
+        status.innerText = "Envoi Discord...";
+        const logRef = push(ref(db, 'logs'));
+        set(logRef, `[${now.toLocaleString()}] BACKUP: Snapshot ${backupName} créé`);
+
+        const discordSuccess = await sendBackupToDiscord(
+            `📸 **Snapshot Manuel** créé par un Admin.\nNom : \`${backupName}\``,
+            `${backupName}.json`
+        );
+
+        if (discordSuccess) {
+            status.innerText = "✅ Tout est sauvegardé !";
+            status.style.color = "#4caf50";
+        } else {
+            status.innerText = "⚠️ Firebase OK mais Erreur Discord.";
+            status.style.color = "#ff9800";
+        }
+    })
+    .catch((err) => { 
+        status.innerText = "❌ Erreur : " + err.message; 
+        status.style.color = "#f44336";
     });
 }
 
+// 3. RESTAURATION DEPUIS FICHIER JSON (NOUVEAU)
+window.handleFileRestore = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            // Vérification basique de structure
+            if (!data.members && !data.rewards) {
+                alert("Ce fichier ne semble pas être une sauvegarde valide.");
+                return;
+            }
+
+            const confirmMsg = `ATTENTION : Vous allez écraser TOUTES les données actuelles avec ce fichier.\n\n` +
+                               `Date sauvegarde : ${data.date || 'Inconnue'}\n` +
+                               `Membres : ${data.members ? data.members.length : 0}\n` +
+                               `Récompenses : ${data.rewards ? data.rewards.length : 0}\n\n` +
+                               `Êtes-vous sûr de vouloir continuer ?`;
+
+            if (confirm(confirmMsg)) {
+                // On met à jour les données locales
+                members = data.members || [];
+                rewards = data.rewards || [];
+                logs = data.logs || [];
+                
+                // On ajoute un log de restauration
+                logs.push(`[${new Date().toLocaleString()}] RESTORE: Restauration depuis fichier ${file.name}`);
+
+                // On envoie tout ça à la racine (via update pour ne pas casser system/backups)
+                const updates = {};
+                updates['/members'] = members;
+                updates['/rewards'] = rewards;
+                updates['/logs'] = logs;
+
+                update(ref(db), updates)
+                .then(() => {
+                    alert("Restauration terminée avec succès !");
+                    // Reset de l'input pour pouvoir réimporter le même fichier si besoin
+                    input.value = ''; 
+                })
+                .catch(err => alert("Erreur lors de la restauration : " + err.message));
+            }
+        } catch (err) {
+            alert("Erreur de lecture du fichier JSON : " + err);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// 4. RESTAURATION SNAPSHOT INTERNE
+window.restoreBackupPrompt = function() {
+    const backupName = prompt("DANGER : Ceci va écraser TOUTES les données par une ancienne version interne.\nCollez le nom du backup (ex: snapshot_2026...):");
+    
+    if (backupName) {
+        get(child(ref(db), `backups/${backupName}`)).then((snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                members = data.members || [];
+                rewards = data.rewards || [];
+                logs = data.logs || [];
+                
+                const updates = {};
+                updates['/members'] = members;
+                updates['/rewards'] = rewards;
+                updates['/logs'] = logs;
+                
+                update(ref(db), updates).then(() => alert("Restauration terminée."));
+            } else {
+                alert("Sauvegarde introuvable.");
+            }
+        }).catch((error) => alert("Erreur: " + error.message));
+    }
+}
+
+window.renderBackups = function(snapshot) {
+    const container = document.getElementById('backupList');
+    if(!container) return;
+    const backups = snapshot.val();
+    container.innerHTML = '';
+
+    if (!backups) {
+        container.innerHTML = '<span style="color:#666">Aucune sauvegarde trouvée.</span>';
+        return;
+    }
+
+    const list = Object.entries(backups).sort((a, b) => b[0].localeCompare(a[0]));
+    list.forEach(([key, val]) => {
+        const dateStr = val.savedAt || key;
+        const itemCount = (val.members ? val.members.length : 0);
+        
+        container.innerHTML += `
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; padding:4px 0;">
+                <span style="color:#00bcd4">${dateStr}</span>
+                <span style="color:#666">${itemCount} mbrs</span>
+                <button onclick="copyBackupData('${key}')" style="background:none; border:none; cursor:pointer; font-size:1.2em;" title="Copier le nom">📋</button>
+            </div>
+        `;
+    });
+}
+
+window.copyBackupData = function(text) {
+    navigator.clipboard.writeText(text);
+    alert("Nom copié : " + text);
+}
+
 // ============================================================
-// TOUT LE RESTE DU CODE EST IDENTIQUE A TA V7
-// J'ai juste gardé la logique métier, car renderAll utilise 
-// les variables globales `members`, `rewards` mises à jour plus haut.
+// UI HELPERS
 // ============================================================
 
-// --- UI HELPERS ---
 window.switchTab = function(tabId) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -163,7 +347,7 @@ window.resetRankFilters = function() {
 window.toggleTypeFilter = function(type) {
     const btn = document.querySelector(`.type-btn[data-type="${type}"]`);
     if (activeTypes.has(type)) {
-        if (activeTypes.size > 1) { // On empêche de tout décocher
+        if (activeTypes.size > 1) {
             activeTypes.delete(type);
             btn.classList.remove('active');
         }
@@ -210,8 +394,10 @@ window.processImport = function() {
     });
 
     if (addedCount > 0) {
-        addLog(`IMPORT: ${addedCount} membres ajoutés.`);
-        saveData(); // Envoie au Cloud
+        // Log via push pour pas écraser
+        const logRef = push(ref(db, 'logs'));
+        set(logRef, `[${new Date().toLocaleString()}] IMPORT: ${addedCount} membres ajoutés.`);
+        saveData(); 
         alert(`${addedCount} ajoutés.`);
         window.closeModal('importModal');
     }
@@ -219,9 +405,7 @@ window.processImport = function() {
 
 // --- METIER ---
 function getLatestRewardDate(memberName) {
-    // On ne regarde QUE les récompenses des types actifs
     const memberRewards = rewards.filter(r => r.member === memberName && activeTypes.has(r.type));
-    
     if (memberRewards.length === 0) return 0;
     memberRewards.sort((a, b) => new Date(b.date) - new Date(a.date));
     return new Date(memberRewards[0].date).getTime();
@@ -261,8 +445,12 @@ window.addReward = function() {
     if (!realMember) { alert("Membre inconnu !"); return; }
 
     rewards.unshift({ id: Date.now(), member: realMember.name, date: date, type: type });
-    addLog(`AJOUT: ${realMember.name} | ${type}`);
-    saveData(); // Envoie au Cloud
+    
+    const logRef = push(ref(db, 'logs'));
+    set(logRef, `[${new Date().toLocaleString()}] AJOUT: ${realMember.name} | ${type}`);
+    
+    saveData();
+    renderMainList();
 }
 
 window.addMember = function() {
@@ -271,8 +459,11 @@ window.addMember = function() {
 
     if(name && !members.some(m => m.name.toLowerCase() === name.toLowerCase())) {
         members.push({ name: name, rank: rank });
-        addLog(`ADMIN: Création ${name} (${rank})`);
-        saveData(); // Envoie au Cloud
+        
+        const logRef = push(ref(db, 'logs'));
+        set(logRef, `[${new Date().toLocaleString()}] ADMIN: Création ${name} (${rank})`);
+        
+        saveData();
         document.getElementById('newMemberName').value = '';
     } else { alert("Nom invalide ou existant"); }
 }
@@ -292,8 +483,9 @@ window.confirmMemberEdit = function() {
     const m = members.find(x => x.name === name);
     if(m) {
         m.rank = newRank;
-        addLog(`ADMIN: ${name} Rang -> ${newRank}`);
-        saveData(); // Envoie au Cloud
+        const logRef = push(ref(db, 'logs'));
+        set(logRef, `[${new Date().toLocaleString()}] ADMIN: ${name} Rang -> ${newRank}`);
+        saveData();
         window.closeModal('memberEditModal');
     }
 }
@@ -302,8 +494,9 @@ window.deleteMember = function(name) {
     event.stopPropagation();
     if(confirm(`Supprimer ${name} ?`)) {
         members = members.filter(m => m.name !== name);
-        addLog(`ADMIN: Suppression ${name}`);
-        saveData(); // Envoie au Cloud
+        const logRef = push(ref(db, 'logs'));
+        set(logRef, `[${new Date().toLocaleString()}] ADMIN: Suppression ${name}`);
+        saveData();
     }
 }
 
@@ -318,24 +511,16 @@ window.renderMainList = function() {
     const statusFilter = document.getElementById('statusFilter').value;
     const sortMode = document.getElementById('sortFilter').value;
 
-    // 1. FILTRAGE DES MEMBRES
     let filtered = members.filter(m => {
-        // A. Filtre Rank
         if (!activeRanks.has(m.rank)) return false;
-
-        // B. On récupère l'historique FILTRÉ PAR TYPE pour ce membre
-        // On ne considère que les récompenses (VIP ou Train) qui sont cochées en haut
-        const visibleRewards = rewards.filter(r => r.member === m.name && activeTypes.has(r.type));
-
-        // C. Filtre Statut (Déjà reçu / Jamais) basé sur les récompenses VISIBLES
-        // Ex: Si je filtre "VIP" seulement, "Jamais Reçu" montrera ceux qui n'ont jamais eu de VIP (même s'ils ont eu du Train)
-        if (statusFilter === 'NEVER' && visibleRewards.length > 0) return false;
-        if (statusFilter === 'RECEIVED' && visibleRewards.length === 0) return false;
-
+        const memberHistory = rewards.filter(r => r.member === m.name);
+        const relevantHistory = memberHistory.filter(h => activeTypes.has(h.type));
+        
+        if (statusFilter === 'NEVER' && relevantHistory.length > 0) return false;
+        if (statusFilter === 'RECEIVED' && relevantHistory.length === 0) return false;
         return true;
     });
 
-    // 2. TRI
     filtered.sort((a, b) => {
         let res = 0;
         if (sortMode === 'RANK') {
@@ -354,19 +539,16 @@ window.renderMainList = function() {
         return;
     }
 
-    // 3. AFFICHAGE
     let lastRank = null;
     filtered.forEach(m => {
         if (sortMode === 'RANK' && m.rank !== lastRank) {
-            // Compteur mis à jour selon le filtre
             const count = filtered.filter(f => f.rank === m.rank).length;
             container.innerHTML += `<div class="rank-separator">${m.rank} <span style="font-size:0.8em; margin-left:8px; opacity:0.6">(${count})</span></div>`;
             lastRank = m.rank;
         }
-
-        // On ré-applique le filtre Type pour l'affichage des badges
+        
         const memberHistory = rewards
-            .filter(r => r.member === m.name && activeTypes.has(r.type)) // <--- ICI
+            .filter(r => r.member === m.name && activeTypes.has(r.type))
             .sort((a, b) => new Date(b.date) - new Date(a.date))
             .slice(0, MAX_HISTORY_DISPLAY);
         
@@ -375,12 +557,7 @@ window.renderMainList = function() {
             const bgClass = h.type === 'VIP' ? 'bg-vip' : 'bg-train';
             historyHTML += `<div class="history-badge ${bgClass}" onclick="openEditModal(${h.id}); event.stopPropagation();"><strong>${h.type}</strong><span class="date">${formatDate(h.date)}</span></div>`;
         });
-
-        // Texte si vide (dépend du contexte)
-        if(memberHistory.length === 0) {
-            // Petit détail UX : Si on filtre "VIP" et que le mec n'en a pas, on affiche "Aucun VIP"
-            historyHTML = '<span style="font-size:0.8em; opacity:0.3; align-self:center;">-</span>';
-        }
+        if(memberHistory.length === 0) historyHTML = '<span style="font-size:0.8em; opacity:0.3; align-self:center;">-</span>';
 
         container.innerHTML += `
             <div class="member-row">
@@ -446,11 +623,12 @@ window.confirmDelete = function() {
     }
 }
 function addLog(msg) {
-    logs.unshift(`[${new Date().toLocaleString()}] ${msg}`);
-    if(logs.length > 500) logs.pop();
+    const logRef = push(ref(db, 'logs'));
+    set(logRef, `[${new Date().toLocaleString()}] ${msg}`);
 }
 window.downloadLogs = function() {
-    const blob = new Blob([logs.join('\n')], { type: 'text/plain' });
+    const logArray = Array.isArray(logs) ? logs : Object.values(logs);
+    const blob = new Blob([logArray.join('\n')], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = window.URL.createObjectURL(blob);
     a.download = `Logs_${new Date().toISOString().slice(0,10)}.txt`;
