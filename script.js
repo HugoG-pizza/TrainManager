@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Connecté (UID):", user.uid);
             startDatabaseListener();
             
-            // Lancer la vérification de backup auto
+            // Lancer la vérification de backup auto (petit délai pour laisser le temps de charger)
             setTimeout(checkAndRunAutoBackup, 3000);
         } else {
             console.log("Utilisateur déconnecté, tentative de connexion anonyme...");
@@ -62,22 +62,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Fonction qui démarre l'écoute de la DB (CORRIGÉE POUR TYPE ARRAY)
+// Fonction qui démarre l'écoute de la DB
 function startDatabaseListener() {
     // 1. Ecoute principale
     onValue(ref(db, '/'), (snapshot) => {
         const data = snapshot.val();
         if (data) {
-            // CORRECTION CRITIQUE : On force la conversion en Tableau si c'est un Objet
-            // Cela répare le bug "members.push is not a function"
-            members = data.members ? (Array.isArray(data.members) ? data.members : Object.values(data.members)) : [];
-            rewards = data.rewards ? (Array.isArray(data.rewards) ? data.rewards : Object.values(data.rewards)) : [];
-            logs = data.logs ? (Array.isArray(data.logs) ? data.logs : Object.values(data.logs)) : [];
-            
-            // Nettoyage des valeurs nulles/undefined qui peuvent corrompre les tableaux
-            members = members.filter(m => m);
-            rewards = rewards.filter(r => r);
-            logs = logs.filter(l => l);
+            // CORRECTION CRITIQUE ICI : On utilise Object.values() pour forcer le format Tableau
+            // Cela répare le bug si Firebase renvoie un Objet à cause d'index manquants
+            members = data.members ? Object.values(data.members) : [];
+            rewards = data.rewards ? Object.values(data.rewards) : [];
+            logs = data.logs ? Object.values(data.logs) : [];
         } else {
             members = []; rewards = []; logs = [];
         }
@@ -104,13 +99,11 @@ function setupEventListeners() {
 // --- SAUVEGARDE (CLOUD) ---
 function saveData() {
     if (!auth.currentUser) { alert("Attendez la connexion !"); return; }
-    
-    // On s'assure qu'on envoie bien des tableaux propres
+    // Utiliser update ou set ciblé pour éviter d'écraser backups/system si jamais on touche à la racine
     const updates = {};
     updates['/members'] = members;
     updates['/rewards'] = rewards;
-    updates['/logs'] = logs; // App 1 reste maître de la liste des logs racine (historique général)
-    
+    updates['/logs'] = logs;
     update(ref(db), updates).catch(err => console.error("Erreur save:", err));
 }
 
@@ -128,7 +121,7 @@ async function checkAndRunAutoBackup() {
 
         if (lastDate !== today) {
             console.log("📅 Premier lancement du jour : Backup Discord en cours...");
-            await sendBackupToDiscord(); 
+            await sendBackupToDiscord(); // Envoi sans paramètre = Auto
             set(systemRef, today);
         } else {
             console.log("✅ Backup Discord déjà fait aujourd'hui.");
@@ -213,7 +206,7 @@ window.createBackup = function() {
     });
 }
 
-// 3. RESTAURATION DEPUIS FICHIER JSON
+// 3. RESTAURATION DEPUIS FICHIER JSON (NOUVEAU)
 window.handleFileRestore = function(input) {
     const file = input.files[0];
     if (!file) return;
@@ -223,21 +216,25 @@ window.handleFileRestore = function(input) {
         try {
             const data = JSON.parse(e.target.result);
             
+            // Vérification basique de structure
             if (!data.members && !data.rewards) {
                 alert("Ce fichier ne semble pas être une sauvegarde valide.");
                 return;
             }
 
-            if (confirm(`ATTENTION : Écraser TOUT avec le fichier du ${data.date || 'Inconnu'} ?`)) {
-                members = data.members || [];
-                rewards = data.rewards || [];
-                logs = data.logs || [];
+            const confirmMsg = `ATTENTION : Vous allez écraser TOUTES les données actuelles avec ce fichier.\n\n` +
+                               `Date sauvegarde : ${data.date || 'Inconnue'}\n` +
+                               `Membres : ${data.members ? data.members.length : 0}\n` +
+                               `Récompenses : ${data.rewards ? data.rewards.length : 0}\n\n` +
+                               `Êtes-vous sûr de vouloir continuer ?`;
+
+            if (confirm(confirmMsg)) {
+                // On force la conversion en tableau ici aussi
+                members = data.members ? Object.values(data.members) : [];
+                rewards = data.rewards ? Object.values(data.rewards) : [];
+                logs = data.logs ? Object.values(data.logs) : [];
                 
-                // On s'assure que ce sont bien des tableaux avant d'envoyer
-                if (!Array.isArray(members)) members = Object.values(members);
-                if (!Array.isArray(rewards)) rewards = Object.values(rewards);
-                
-                logs.push(`[${new Date().toLocaleString()}] RESTORE: Restauration fichier JSON`);
+                logs.push(`[${new Date().toLocaleString()}] RESTORE: Restauration depuis fichier ${file.name}`);
 
                 const updates = {};
                 updates['/members'] = members;
@@ -246,13 +243,13 @@ window.handleFileRestore = function(input) {
 
                 update(ref(db), updates)
                 .then(() => {
-                    alert("Restauration terminée !");
+                    alert("Restauration terminée avec succès !");
                     input.value = ''; 
                 })
-                .catch(err => alert("Erreur : " + err.message));
+                .catch(err => alert("Erreur lors de la restauration : " + err.message));
             }
         } catch (err) {
-            alert("Erreur fichier JSON : " + err);
+            alert("Erreur de lecture du fichier JSON : " + err);
         }
     };
     reader.readAsText(file);
@@ -260,15 +257,16 @@ window.handleFileRestore = function(input) {
 
 // 4. RESTAURATION SNAPSHOT INTERNE
 window.restoreBackupPrompt = function() {
-    const backupName = prompt("DANGER : Ceci va écraser TOUTES les données.\nNom du backup :");
+    const backupName = prompt("DANGER : Ceci va écraser TOUTES les données par une ancienne version.\nCollez le nom du backup :");
     
     if (backupName) {
         get(child(ref(db), `backups/${backupName}`)).then((snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                members = data.members ? (Array.isArray(data.members) ? data.members : Object.values(data.members)) : [];
-                rewards = data.rewards ? (Array.isArray(data.rewards) ? data.rewards : Object.values(data.rewards)) : [];
-                logs = data.logs || [];
+                // Force array conversion
+                members = data.members ? Object.values(data.members) : [];
+                rewards = data.rewards ? Object.values(data.rewards) : [];
+                logs = data.logs ? Object.values(data.logs) : [];
                 
                 const updates = {};
                 updates['/members'] = members;
@@ -277,7 +275,7 @@ window.restoreBackupPrompt = function() {
                 
                 update(ref(db), updates).then(() => alert("Restauration terminée."));
             } else {
-                alert("Introuvable.");
+                alert("Sauvegarde introuvable.");
             }
         }).catch((error) => alert("Erreur: " + error.message));
     }
@@ -396,6 +394,7 @@ window.processImport = function() {
     });
 
     if (addedCount > 0) {
+        // Log via push pour pas écraser
         const logRef = push(ref(db, 'logs'));
         set(logRef, `[${new Date().toLocaleString()}] IMPORT: ${addedCount} membres ajoutés.`);
         saveData(); 
