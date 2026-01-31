@@ -100,7 +100,8 @@
         <div class="backup-panel">
             <h3 style="margin-top:0; color: #00bcd4;">🛡️ Centre de Sauvegarde</h3>
             <p style="font-size:0.9em; color:#aaa;">
-                Gérez vos sauvegardes (Discord Auto & Snapshots Firebase).
+                Sauvegardes APP 1 (Rewards & Logs).<br>
+                Les membres sont partagés avec l'App 2.
             </p>
             
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
@@ -173,16 +174,30 @@
 </div>
 
 <div id="importModal" class="modal-overlay">
-    <div class="modal-box" style="width: 400px;">
-        <h3 style="margin-top:0">Importer une liste</h3>
-        <p style="font-size:0.9em; color:#aaa; margin-bottom:10px;">
-            Collez votre liste de pseudos ici (un par ligne).<br>
-            Ils seront tous ajoutés en <strong>R1</strong>.
-        </p>
-        <textarea id="importTextarea" rows="10" placeholder="Alex&#10;Arthur&#10;Brian..."></textarea>
+    <div class="modal-box" style="width: 450px;">
+        <h3 style="margin-top:0">Importer une liste en cascade</h3>
+        
+        <div style="background:#333; padding:10px; border-radius:4px; margin-bottom:15px; font-size:0.9em; color:#ccc;">
+            <div style="margin-bottom:10px;">
+                <label style="font-weight:bold; color:white;">Rang du 1er bloc :</label>
+                <select id="importStartRank" style="width:auto; display:inline-block; margin-left:10px;">
+                    <option value="R5" selected>R5</option>
+                    <option value="R4">R4</option>
+                    <option value="R3">R3</option>
+                    <option value="R2">R2</option>
+                    <option value="R1">R1</option>
+                </select>
+            </div>
+            <p style="margin:0;">⚠ <strong>Fonctionnement :</strong><br>
+            Le 1er bloc de noms prendra le rang sélectionné.<br>
+            Dès qu'une <strong>ligne vide</strong> est détectée, le bloc suivant prendra le rang inférieur (ex: R5 -> R4 -> R3...).</p>
+        </div>
+
+        <textarea id="importTextarea" rows="12" placeholder="Chef (R5)&#10;&#10;Bras Droit (R4)&#10;Capitaine (R4)&#10;..."></textarea>
+        
         <div class="modal-buttons">
             <button class="btn-cancel" onclick="closeModal('importModal')">Annuler</button>
-            <button class="btn-save" onclick="processImport()">Importer</button>
+            <button class="btn-save" onclick="processImport()">Importer en cascade</button>
         </div>
     </div>
 </div>

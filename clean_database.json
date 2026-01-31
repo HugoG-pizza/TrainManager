@@ -1,0 +1,35 @@
+{
+  "members": [
+    { "name": "ExempleJoueur", "rank": "R4", "customId": 1 }
+  ],
+  "app1": {
+    "rewards": {
+        "0": {
+            "id": 1700000000000,
+            "member": "ExempleJoueur",
+            "date": "2026-01-31",
+            "type": "VIP"
+        }
+    },
+    "logs": [ "[SYSTEM] Base App 1 initialisée" ],
+    "backups": {},
+    "system": { "lastBackupDate": "" }
+  },
+  "app2": {
+    "rotation": {
+        "ExempleJoueur": {
+            "isTrainActive": false,
+            "isVipActive": false,
+            "trainCycle": 0,
+            "vipCycle": 0
+        }
+    },
+    "rotation_history": {
+      "vip": {},
+      "train": {}
+    },
+    "logs": [ "[SYSTEM] Base App 2 initialisée" ],
+    "backups": {},
+    "system": { "lastBackupDateRotation": "" }
+  }
+}
