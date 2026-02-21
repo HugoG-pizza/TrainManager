@@ -23,7 +23,7 @@ const auth = getAuth();
 
 // --- CONFIG APP ---
 const MAX_HISTORY_DISPLAY = 5;
-const RANK_POWER = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1 };
+const RANK_POWER = { 'R5': 5, 'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1, 'ABS': 0 };
 
 // --- DATA ---
 let members = [];
@@ -31,7 +31,7 @@ let rewards = [];
 let logs = [];
 
 // --- STATE UI ---
-let activeRanks = new Set(['R1', 'R2', 'R3', 'R4', 'R5']);
+let activeRanks = new Set(['R1', 'R2', 'R3', 'R4', 'R5', 'ABS']);
 let isReverseOrder = false;
 let activeTypes = new Set(['VIP', 'TRAIN']);
 
@@ -350,47 +350,68 @@ window.switchTab = function(t){
     if(t==='tab-rewards') document.querySelectorAll('.tab-btn')[0].classList.add('active');
     if(t==='tab-members') document.querySelectorAll('.tab-btn')[1].classList.add('active');
 }
-window.toggleRankFilter = function(r){ activeRanks.has(r) ? activeRanks.delete(r) : activeRanks.add(r); renderMainList(); }
-window.resetRankFilters = function(){ ['R1','R2','R3','R4','R5'].forEach(r => activeRanks.add(r)); renderMainList(); }
-window.toggleTypeFilter = function(t){ activeTypes.has(t) ? activeTypes.delete(t) : activeTypes.add(t); renderMainList(); }
-window.resetTypeFilters = function(){ ['VIP', 'TRAIN'].forEach(t => activeTypes.add(t)); renderMainList(); }
+window.toggleRankFilter = function(r) { 
+    const btn = document.querySelector(`.rank-btn[data-rank="${r}"]`);
+    if (activeRanks.has(r)) { 
+        activeRanks.delete(r); 
+        if(btn) btn.classList.remove('active'); 
+    } else { 
+        activeRanks.add(r); 
+        if(btn) btn.classList.add('active'); 
+    }
+    renderMainList(); 
+}
+
+window.resetRankFilters = function() { 
+    ['R5','R4','R3','R2','R1','ABS'].forEach(r => activeRanks.add(r)); 
+    document.querySelectorAll('.rank-btn[data-rank]').forEach(b => b.classList.add('active')); 
+    renderMainList(); 
+}
+
+window.toggleTypeFilter = function(t) { 
+    const btn = document.querySelector(`.type-btn[data-type="${t}"]`);
+    if (activeTypes.has(t)) { 
+        activeTypes.delete(t); 
+        if(btn) btn.classList.remove('active'); 
+    } else { 
+        activeTypes.add(t); 
+        if(btn) btn.classList.add('active'); 
+    }
+    renderMainList(); 
+}
+
+window.resetTypeFilters = function() { 
+    ['VIP', 'TRAIN'].forEach(t => activeTypes.add(t)); 
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.add('active'));
+    renderMainList(); 
+}
 window.toggleSortOrder = function(){ isReverseOrder = !isReverseOrder; renderMainList(); }
 
 window.openImportModal = function(){ document.getElementById('importTextarea').value = ''; document.getElementById('importModal').style.display = 'flex'; }
 window.processImport = function() {
     const rawText = document.getElementById('importTextarea').value;
-    const startRank = document.getElementById('importStartRank').value; // ex: "R5"
+    const startRankSelect = document.getElementById('importStartRank');
+    const startRank = startRankSelect ? startRankSelect.value : 'R5'; 
     
     if(!rawText) return;
 
-    // Définition de l'ordre de descente
-    const rankOrder = ['R5', 'R4', 'R3', 'R2', 'R1'];
-    
-    // Trouver l'index de départ (ex: Si on choisit R5, index = 0)
+    // Ordre de descente incluant ABS
+    const rankOrder = ['R5', 'R4', 'R3', 'R2', 'R1', 'ABS']; 
     let currentRankIndex = rankOrder.indexOf(startRank);
 
-    // 1. On nettoie le texte et on normalise les sauts de ligne
-    // 2. On sépare par "Double saut de ligne" (ou plus) pour identifier les BLOCS
-    // Regex: \n\s*\n détecte une ligne vide (avec ou sans espaces dedans)
     const blocks = rawText.replace(/\r\n/g, '\n').split(/\n\s*\n/);
 
     let addedCount = 0;
     let skippedCount = 0;
 
-    // Pour chaque BLOC de noms
     blocks.forEach(block => {
-        // Si on a dépassé R1, on arrête d'attribuer des rangs (ou on met tout en R1, ici on stop)
         if (currentRankIndex >= rankOrder.length) return;
-
         const currentRank = rankOrder[currentRankIndex];
-        
-        // On lit chaque ligne du bloc
         const lines = block.split('\n');
         
         lines.forEach(line => {
             const name = line.trim();
             if (name) {
-                // Vérif doublon (insensible à la casse)
                 if (!members.some(m => m.name.toLowerCase() === name.toLowerCase())) {
                     members.push({ name: name, rank: currentRank, customId: 0 });
                     addedCount++;
@@ -399,9 +420,7 @@ window.processImport = function() {
                 }
             }
         });
-
-        // Une fois le bloc fini, on passe au rang inférieur pour le prochain bloc
-        currentRankIndex++;
+        currentRankIndex++; 
     });
 
     if (addedCount > 0) {
@@ -499,7 +518,8 @@ window.renderMainList = function() {
 function renderManageMembers() {
     const container = document.getElementById('manageMembersGrid');
     container.innerHTML = '';
-    const ranksOrder = ['R5', 'R4', 'R3', 'R2', 'R1'];
+    const ranksOrder = ['R5', 'R4', 'R3', 'R2', 'R1', 'ABS']; // Ajout de ABS ici
+    
     ranksOrder.forEach(rank => {
         const rankMembers = members.filter(m => m.rank === rank).sort((a, b) => a.name.localeCompare(b.name));
         if (rankMembers.length > 0) {
