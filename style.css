@@ -157,3 +157,99 @@ button.action-btn {
 .type-btn { font-weight: bold; }
 .type-btn.active.btn-vip { background-color: var(--vip-color); color: #000; border-color: var(--vip-color); }
 .type-btn.active.btn-train { background-color: var(--train-color); color: white; border-color: var(--train-color); }
+
+
+
+/* ========================================= */
+/* RESPONSIVE MOBILE APP 1 (TRAIN MANAGER)   */
+/* ========================================= */
+
+@media (max-width: 768px) {
+    /* 1. Ajustements globaux pour gagner de la place verticale */
+    .sticky-panel {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+    .nav-tabs {
+        padding: 5px 10px 0 10px;
+    }
+    .tab-btn {
+        font-size: 0.9em;
+        padding: 8px;
+    }
+
+    /* 2. Box de Filtres plus compacte */
+    .filter-bar {
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 10px;
+    }
+    .rank-toggles {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px;
+    }
+    .rank-btn, .reset-btn, .type-btn {
+        padding: 4px 8px;
+        font-size: 0.75em; /* Boutons plus petits */
+    }
+    .vertical-sep { 
+        display: none; 
+    }
+    #statusFilter {
+        width: 100% !important;
+        padding: 6px;
+        font-size: 0.9em;
+    }
+    .sort-controls {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+    #sortFilter {
+        flex: 1;
+        padding: 6px;
+        font-size: 0.9em;
+    }
+    .reverse-btn { 
+        padding: 0 12px; 
+    }
+
+    /* 3. Box de Contrôle en GRILLE 2x2 */
+    .control-box {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 colonnes égales */
+        gap: 8px 10px; /* Espace vertical 8px, horizontal 10px */
+        padding: 10px;
+    }
+    .control-box .input-wrapper {
+        width: auto;
+        flex: none !important; /* Annule la largeur forcée du PC */
+    }
+    .control-box input, .control-box select {
+        padding: 6px;
+        font-size: 0.9em;
+    }
+    .control-box .action-btn {
+        width: 100%;
+        height: 34px;
+        margin-top: 0;
+        align-self: end; /* Aligne le bouton parfaitement avec le selecteur à côté */
+    }
+
+    /* 4. Admin Box aussi optimisée en grille */
+    .admin-add-box {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 10px;
+    }
+    .admin-add-box .input-wrapper { 
+        max-width: 100% !important; 
+    }
+    .admin-add-box .action-btn { 
+        grid-column: span 2; /* Le bouton Ajouter prend toute la largeur en dessous */
+        margin-top: 0;
+    }
+}
