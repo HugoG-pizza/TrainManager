@@ -42,7 +42,7 @@
                 <div class="sort-controls">
                     <select id="sortFilter" style="width:auto;" onchange="renderMainList()">
                         <option value="RANK">Tri: Par Rang</option>
-                        <option value="CHRONO">Tri: Chronologique</option>
+                        <option value="CHRONO" selected>Tri: Chronologique</option>
                     </select>
                     <button class="reverse-btn" onclick="toggleSortOrder()" id="orderBtn" title="Inverser l'ordre">⬇️</button>
                 </div>
@@ -93,7 +93,8 @@
             <button class="action-btn" style="margin:0; height:36px;" onclick="addMember()">Ajouter</button>
         </div>
 
-        <div style="text-align: right; margin-bottom: 15px;">
+        <div style="margin-bottom: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn-import" style="background:#5865F2; color:white; border-color:#5865F2;" onclick="exportMembersToDiscord()">📤 Exporter vers Discord</button>
             <button class="btn-import" onclick="openImportModal()">📥 Importer une liste (Copier/Coller)</button>
         </div>
 

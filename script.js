@@ -465,6 +465,10 @@ window.renderMainList = function() {
         if (!activeRanks.has(m.rank)) return false;
         const memberHistory = rewards.filter(r => r.member === m.name);
         const relevantHistory = memberHistory.filter(h => activeTypes.has(h.type));
+        
+        // --- NOUVEAU : On cache les ABS s'ils n'ont aucun historique ---
+        if (m.rank === 'ABS' && relevantHistory.length === 0) return false;
+
         if (statusFilter === 'NEVER' && relevantHistory.length > 0) return false;
         if (statusFilter === 'RECEIVED' && relevantHistory.length === 0) return false;
         return true;
@@ -540,3 +544,46 @@ function getLatestRewardDate(memberName) {
     return new Date(memberRewards[0].date).getTime();
 }
 function formatDate(d) { return d ? d.split('-').reverse().slice(0,2).join('/') : ''; }
+
+
+
+// ============================================================
+// EXPORT LISTE VERS DISCORD
+// ============================================================
+
+window.exportMembersToDiscord = async function() {
+    if (!auth.currentUser) return;
+    
+    // On garde l'ordre R5 -> ABS
+    const ranksOrder = ['R5', 'R4', 'R3', 'R2', 'R1', 'ABS'];
+    let exportText = "";
+
+    ranksOrder.forEach(rank => {
+        const rankMembers = members.filter(m => m.rank === rank).sort((a, b) => a.name.localeCompare(b.name));
+        if (rankMembers.length > 0) {
+            rankMembers.forEach(m => {
+                exportText += m.name + "\n";
+            });
+            // Ligne vide pour créer un "bloc" compatible avec l'import en cascade
+            exportText += "\n"; 
+        }
+    });
+
+    // Création du fichier texte
+    const blob = new Blob([exportText.trim()], { type: 'text/plain' });
+    const formData = new FormData();
+    formData.append('file', blob, `Liste_Joueurs_${new Date().toISOString().split('T')[0]}.txt`);
+    
+    // Message accompagnant le fichier
+    formData.append('payload_json', JSON.stringify({ 
+        content: `📜 **Export de la liste des membres (App 1)**\n*Le fichier est au format "cascade" (prêt à être copié/collé dans la modale d'import).*` 
+    }));
+
+    try { 
+        await fetch(DISCORD_WEBHOOK_URL, { method: 'POST', body: formData }); 
+        alert("Liste envoyée sur Discord avec succès !");
+    } catch(e) {
+        alert("Erreur lors de l'envoi sur Discord.");
+        console.error(e);
+    }
+}
